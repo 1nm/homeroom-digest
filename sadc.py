@@ -102,7 +102,7 @@ class SchoologyAlbumsDownloader:
     def download_album(self, album: tuple[str, str], touch=False) -> None:
         course_id = self.config['course_id']
         (album_url, album_title) = album
-        normalized_album_title = album_title.replace('/', '_')
+        normalized_album_title = album_title.replace('/', '_').replace(':', '')
         album_download_folder = Path(f"photos/{course_id}/{normalized_album_title}")
         if album_url in self.config['downloaded']:
             self._logger.info(f"Album {album_url} already downloaded")
@@ -324,7 +324,7 @@ class SchoologyAlbumsDownloader:
 
         self._wait(5)
 
-        self._save_cookies(schoology_cookie_file)
+        # self._save_cookies(schoology_cookie_file)
 
         self.driver.close()
 
