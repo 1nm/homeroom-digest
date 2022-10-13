@@ -58,7 +58,7 @@ class SchoologyAlbumsDownloader:
     def _save_cookies(self, cookie_file: str) -> None:
         self._logger.info(f"Saving cookies to {cookie_file} ...")
         cookies = self.driver.get_cookies()
-        pickle.dump(cookies, open(cookie_file,"wb"))
+        # pickle.dump(cookies, open(cookie_file,"wb"))
         for cookie in cookies:
             if 'expiry' in cookie:
                 cookie['expires'] = cookie['expiry']
@@ -257,7 +257,6 @@ class SchoologyAlbumsDownloader:
         password_input.clear()
         password_input.send_keys(password)
         submit_button.click()
-        
 
         self._wait(5)
 
@@ -324,7 +323,7 @@ class SchoologyAlbumsDownloader:
 
         self._wait(5)
 
-        # self._save_cookies(schoology_cookie_file)
+        self._save_cookies(schoology_cookie_file)
 
         self.driver.close()
 
