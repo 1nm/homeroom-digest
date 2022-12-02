@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import pickle
+import random
 import re
 import shutil
 import time
@@ -83,9 +84,12 @@ class SchoologyAlbumsDownloader:
 
     def download_media(self, url: str, download_path: Path) -> None:
         with self.session.get(url, stream=True, allow_redirects=True) as r:
-            d = r.headers['content-disposition']
-            fname = re.findall('filename="(.+)"', d)[0]
-            fname = fname.replace('/', '.')
+            if 'content-disposition' not in r.headers:
+                fname = ''.join(random.choices(string.ascii_lowercase + string.digits, k=16))
+            else:
+                d = r.headers['content-disposition']
+                fname = re.findall('filename="(.+)"', d)[0]
+                fname = fname.replace('/', '.')
 
             full_path = download_path / fname
 
