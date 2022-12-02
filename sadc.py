@@ -341,7 +341,7 @@ def main():
     # downloader.onedrive_login(args.email, args.password)
     downloader.schoology_login(args.email, args.password)
     albums = downloader.get_albums()
-    for album in albums:
+    for album in reversed(albums):
         downloader.download_album(album)
 
 if __name__ == "__main__":
