@@ -117,6 +117,7 @@ class SchoologyAlbumsDownloader:
         else:
             self._logger.info(f"Downloading album {normalized_album_title} from {album_url} ...")
             album_download_folder.mkdir(parents=True, exist_ok=True)
+            download_count = 0
             with self.session.get(f"{self._base_url}{album_url}", stream=True, allow_redirects=True) as r:
                 r.raw.decode_content = True
                 result = r.raw.data.decode('unicode-escape').replace('\\/', '/')
@@ -132,14 +133,17 @@ class SchoologyAlbumsDownloader:
                             download_urls = [f"{self._base_url}/system/files/{m[0]}" for m in download_url_matches]
                             for media_url in download_urls:
                                 self.download_media(media_url, album_download_folder)
+                                download_count += 1
                 else:
                     download_urls = [f"{self._base_url}/system/files/{m[0]}" for m in matches]
                     for photo_url in download_urls:
                         self.download_media(photo_url, album_download_folder)
+                        download_count += 1
             downloaded_at = time.time()
             self._logger.info(f"Finished downloading album {normalized_album_title} at {downloaded_at} ...")
-        self.config['downloaded'][album_url] = {'url': album_url, 'title': album_title, 'downloaded_at': downloaded_at}
-        self._save_config()
+        if touch or download_count > 0:
+            self.config['downloaded'][album_url] = {'url': album_url, 'title': album_title, 'downloaded_at': downloaded_at}
+            self._save_config()
 
     def get_albums(self) -> list[tuple[str, str]]:
         course_id = self.config['course_id']
