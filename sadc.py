@@ -31,8 +31,7 @@ class SchoologyAlbumsDownloader:
             options.add_argument("--headless")
         self.driver = webdriver.Chrome(options=options)
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/44.0.2403.157 Safari/537.36 "
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
         }
         self.session = requests.session()
         self.session.headers.update(headers)
