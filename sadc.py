@@ -1,3 +1,4 @@
+import getpass
 import json
 import logging
 import os
@@ -6,8 +7,8 @@ import random
 import re
 import shutil
 import time
+
 from argparse import ArgumentParser
-from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -383,13 +384,14 @@ class SchoologyAlbumsDownloader:
 def main():
     parser = ArgumentParser("Schoology Albums Downloader CLI")
     parser.add_argument("-e", "--email")
-    parser.add_argument("-p", "--password")
     parser.add_argument("-s", "--subdomain")
     args = parser.parse_args()
+    password = getpass.getpass()
+
     downloader = SchoologyAlbumsDownloader(headless=True,
                                            subdomain=args.subdomain)
     # downloader.onedrive_login(args.email, args.password)
-    downloader.schoology_login(args.email, args.password)
+    downloader.schoology_login(args.email, password)
     albums = downloader.get_albums()
     for album in reversed(albums):
         downloader.download_album(album)
