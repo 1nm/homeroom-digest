@@ -1,6 +1,3 @@
-from langchain.prompts import ChatPromptTemplate
-from langchain.chat_models import ChatOpenAI
-from dotenv import find_dotenv, load_dotenv
 import json
 import logging
 import os
@@ -14,6 +11,9 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from dotenv import find_dotenv, load_dotenv
+from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (ImageSendMessage, MessageEvent, TextMessage,
@@ -460,30 +460,19 @@ def summarize(text):
     # To control the randomness and creativity of the generated
     # text by an LLM, use temperature = 0.0
 
-    template_string = """
-    For the following update from the elementary school teacher, extract the following information:
-
-    summary: A short summary of the daily from the elementary school teacher
-    summary_ja: Translate the summary into Japanese
-    action_items: Extract the homework action items for the parents, order the items in deadline date
-
-    Format the output as JSON with the following keys:
-    summary
-    summary_ja
-    action_items
-
-    text: ```{text}```
-    """
-
+    template_string = os.environ.get("PROMPT_TEMPLATE")
     prompt_template = ChatPromptTemplate.from_template(template_string)
     messages = prompt_template.format_messages(text=text)
-    chat = ChatOpenAI(temperature=0.0, model='gpt-3.5-turbo')
+
+    chat = AzureChatOpenAI(
+        deployment_name=os.environ.get("OPENAI_DEPLOYMENT_NAME")
+    )
+
     response = chat(messages)
     return response.content
 
 
 def main():
-
     EMAIL = os.environ.get("SCHOOLOGY_EMAIL")
     PASSWORD = os.environ.get("SCHOOLOGY_PASSWORD")
     SUBDOMAIN = os.environ.get("SCHOOLOGY_SUBDOMAIN")
@@ -495,21 +484,27 @@ def main():
     posts = downloader.get_updates()
     for post in reversed(posts):
         if not post['post_id'] in downloader.config['updates']:
-            # line_bot_api.push_message(
-            #     line_group_id,
-            #     TextSendMessage(
-            #         text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
-            # )
-            # for image in post['images']:
-            #     line_bot_api.push_message(
-            #         line_group_id,
-            #         ImageSendMessage(
-            #             original_content_url=image,
-            #             preview_image_url=image
-            #         )
-            #     )
-            summary = summarize(post['content'])
-            logging.info(summary)
+            update_content = f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}"
+            line_bot_api.push_message(
+                line_group_id,
+                TextSendMessage(
+                    text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
+            )
+            for image in post['images']:
+                line_bot_api.push_message(
+                    line_group_id,
+                    ImageSendMessage(
+                        original_content_url=image,
+                        preview_image_url=image
+                    )
+                )
+            summary = summarize(update_content)
+            # logging.info(summary)
+            line_bot_api.push_message(
+                line_group_id,
+                TextSendMessage(
+                    text=f"AI Summary:\n\n{summary}")
+            )
             downloader.config['updates'][post['post_id']] = post
     downloader._save_config()
 
