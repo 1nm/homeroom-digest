@@ -217,6 +217,17 @@ class SchoologyAlbumsDownloader:
             page += 1
         return albums
 
+    def get_updates(self):
+        course_id = self.config['course_id']
+        with self.session.get(
+                f"{self._base_url}/course/{course_id}/feed?filter=1",
+                stream=True,
+                allow_redirects=True) as r:
+            r.raw.decode_content = True
+            result = r.raw.data.decode('unicode-escape').replace(
+                    '\\/', '/')
+            print(result)
+
     def onedrive_login(self, email: str, password: str) -> None:
         onedrive_cookie_file = 'onedrive_cookies.pkl'
 
@@ -357,24 +368,7 @@ class SchoologyAlbumsDownloader:
         course_id = current_url[36:46]
         self.config['course_id'] = course_id
 
-        # Filter materials by albums
-        self._logger.info(f"Filtering by albums ...")
-        material_filter = WebDriverWait(self.driver, self._timeout).until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//span[contains(text(),"All Materials")]')))
-
-        material_filter.click()
-
-        self._wait(5)
-
-        material_filter_albums = WebDriverWait(
-            self.driver, self._timeout).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, '//a[contains(text(),"Albums")]')))
-
-        material_filter_albums.click()
-
-        self._wait(5)
+        self.get_updates()
 
         self._save_cookies(schoology_cookie_file)
 
