@@ -1,5 +1,6 @@
-import getpass
-import sys
+from langchain.prompts import ChatPromptTemplate
+from langchain.chat_models import ChatOpenAI
+from dotenv import find_dotenv, load_dotenv
 import json
 import logging
 import os
@@ -7,19 +8,16 @@ import pickle
 import random
 import re
 import shutil
+import sys
 import time
-from bs4 import BeautifulSoup
-import requests
-
-from argparse import ArgumentParser
 from pathlib import Path
 
+import requests
+from bs4 import BeautifulSoup
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (ImageSendMessage, MessageEvent, TextMessage,
                             TextSendMessage)
-
-import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -30,31 +28,8 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s",
                     level=logging.INFO)
 
 
-from dotenv import load_dotenv, find_dotenv
-
-import openai
-from langchain.chat_models import ChatOpenAI
-# To control the randomness and creativity of the generated
-# text by an LLM, use temperature = 0.0
-chat = ChatOpenAI(temperature=0.0, model=llm_model)
-chat
-
-template_string = """Translate the text \
-that is delimited by triple backticks \
-into a style that is {style}. \
-text: ```{text}```
-"""
-from langchain.prompts import ChatPromptTemplate
-
-prompt_template = ChatPromptTemplate.from_template(template_string)
-
-
-
-
-
 load_dotenv(find_dotenv(usecwd=True))
 
-openai.api_key = os.environ['OPENAI_API_KEY']
 
 channel_secret = os.getenv('LINE_CHANNEL_SECRET', None)
 line_group_id = os.getenv('LINE_GROUP_ID', None)
@@ -68,6 +43,7 @@ if channel_access_token is None:
 
 line_bot_api = LineBotApi(channel_access_token)
 handler = WebhookHandler(channel_secret)
+
 
 class SchoologyAlbumsDownloader:
 
@@ -272,54 +248,57 @@ class SchoologyAlbumsDownloader:
                 allow_redirects=True) as r:
             r.raw.decode_content = True
             result = r.raw.data.decode('unicode-escape').replace(
-                    '\\/', '/')
+                '\\/', '/')
             posts = self.parse_posts(result)
             return posts
-
 
     def parse_posts(self, html):
         soup = BeautifulSoup(html, 'html.parser')
         posts = soup.find_all('li', {'class': ['first', '']})
-        
+
         parsed_posts = []
-        
+
         for post in posts:
             # Extract post id
             post_id = post.get('id', '').replace('edge-assoc-', '')
-            
+
             # Extract date and time
             datetime = post.find('span', {'class': 'small gray'})
             datetime = datetime.text if datetime else ''
-            
+
             # Extract author's name and profile picture
             author = post.find('a', {'title': 'View user profile.'})
             author_name = author.text if author else ''
-            
-            profile_pic = post.find('img', {'class': 'imagecache imagecache-profile_sm'})
+
+            profile_pic = post.find(
+                'img', {'class': 'imagecache imagecache-profile_sm'})
             profile_pic_url = profile_pic.get('src', '') if profile_pic else ''
-            
+
             # Extract main content
             content_span = post.find('span', {'class': 'update-body s-rte'})
             content = content_span.get_text() if content_span else ''
-  
+
             # Check if there is a "Show More" link
             show_more_link = post.find('a', {'class': 'show-more-link'})
-            show_more_href = show_more_link.get('href', '') if show_more_link else ''
+            show_more_href = show_more_link.get(
+                'href', '') if show_more_link else ''
 
-            images = [img.get('src', '') for img in content_span.find_all('img')]
+            images = [img.get('src', '')
+                      for img in content_span.find_all('img')]
 
             if show_more_href:
                 with self.session.post(f"{self._base_url}{show_more_href}",
-                                      stream=True,
-                                      allow_redirects=True) as r:
+                                       stream=True,
+                                       allow_redirects=True) as r:
                     if r.status_code == 200:
                         data = r.json()['update']
                         # Parse the additional content using BeautifulSoup
-                        additional_content_soup = BeautifulSoup(data, 'html.parser')
+                        additional_content_soup = BeautifulSoup(
+                            data, 'html.parser')
                         content = additional_content_soup.get_text()
-                        images = [img.get('src', '') for img in additional_content_soup.find_all('img')]
+                        images = [
+                            img.get('src', '') for img in additional_content_soup.find_all('img')]
 
-            
             parsed_posts.append({
                 'post_id': post_id,
                 'datetime': datetime,
@@ -329,7 +308,7 @@ class SchoologyAlbumsDownloader:
                 'show_more_href': show_more_href,
                 'images': images
             })
-        
+
         return parsed_posts
 
     def onedrive_login(self, email: str, password: str) -> None:
@@ -477,6 +456,32 @@ class SchoologyAlbumsDownloader:
         self.driver.close()
 
 
+def summarize(text):
+    # To control the randomness and creativity of the generated
+    # text by an LLM, use temperature = 0.0
+
+    template_string = """
+    For the following update from the elementary school teacher, extract the following information:
+
+    summary: A short summary of the daily from the elementary school teacher
+    summary_ja: Translate the summary into Japanese
+    action_items: Extract the homework action items for the parents, order the items in deadline date
+
+    Format the output as JSON with the following keys:
+    summary
+    summary_ja
+    action_items
+
+    text: ```{text}```
+    """
+
+    prompt_template = ChatPromptTemplate.from_template(template_string)
+    messages = prompt_template.format_messages(text=text)
+    chat = ChatOpenAI(temperature=0.0, model='gpt-3.5-turbo')
+    response = chat(messages)
+    return response.content
+
+
 def main():
 
     EMAIL = os.environ.get("SCHOOLOGY_EMAIL")
@@ -490,18 +495,21 @@ def main():
     posts = downloader.get_updates()
     for post in reversed(posts):
         if not post['post_id'] in downloader.config['updates']:
-            line_bot_api.push_message(
-                line_group_id,
-                TextSendMessage(text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
-            )
-            for image in post['images']:
-                line_bot_api.push_message(
-                    line_group_id,
-                    ImageSendMessage(
-                        original_content_url=image,
-                        preview_image_url=image
-                    )
-                )
+            # line_bot_api.push_message(
+            #     line_group_id,
+            #     TextSendMessage(
+            #         text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
+            # )
+            # for image in post['images']:
+            #     line_bot_api.push_message(
+            #         line_group_id,
+            #         ImageSendMessage(
+            #             original_content_url=image,
+            #             preview_image_url=image
+            #         )
+            #     )
+            summary = summarize(post['content'])
+            logging.info(summary)
             downloader.config['updates'][post['post_id']] = post
     downloader._save_config()
 

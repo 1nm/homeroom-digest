@@ -3,3 +3,4 @@ selenium~=3.141.0
 beautifulsoup4
 python-dotenv
 line-bot-sdk
+langchain==0.0.276

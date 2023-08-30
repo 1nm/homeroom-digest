@@ -594,3 +594,4 @@ gradle-app.setting
 *.mp4
 *.pkl
 *.conf
+.env
