@@ -1,4 +1,5 @@
 import getpass
+import sys
 import json
 import logging
 import os
@@ -7,9 +8,16 @@ import random
 import re
 import shutil
 import time
+from bs4 import BeautifulSoup
+import requests
 
 from argparse import ArgumentParser
 from pathlib import Path
+
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import (ImageSendMessage, MessageEvent, TextMessage,
+                            TextSendMessage)
 
 import requests
 from selenium import webdriver
@@ -21,6 +29,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s",
                     level=logging.INFO)
 
+
+from dotenv import load_dotenv, find_dotenv
+
+
+load_dotenv(find_dotenv(usecwd=True))
+channel_secret = os.getenv('LINE_CHANNEL_SECRET', None)
+line_group_id = os.getenv('LINE_GROUP_ID', None)
+channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', None)
+if channel_secret is None:
+    print('Specify LINE_CHANNEL_SECRET as environment variable.')
+    sys.exit(1)
+if channel_access_token is None:
+    print('Specify LINE_CHANNEL_ACCESS_TOKEN as environment variable.')
+    sys.exit(1)
+
+line_bot_api = LineBotApi(channel_access_token)
+handler = WebhookHandler(channel_secret)
 
 class SchoologyAlbumsDownloader:
 
@@ -64,7 +89,7 @@ class SchoologyAlbumsDownloader:
         else:
             self._logger.info(
                 f"Config file not found, initializing default config")
-            self.config = {'course_id': '', 'downloaded': {}}
+            self.config = {'course_id': '', 'downloaded': {}, 'updates': {}}
 
     def _save_cookies(self, cookie_file: str) -> None:
         self._logger.info(f"Saving cookies to {cookie_file} ...")
@@ -226,7 +251,64 @@ class SchoologyAlbumsDownloader:
             r.raw.decode_content = True
             result = r.raw.data.decode('unicode-escape').replace(
                     '\\/', '/')
-            print(result)
+            posts = self.parse_posts(result)
+            return posts
+
+
+    def parse_posts(self, html):
+        soup = BeautifulSoup(html, 'html.parser')
+        posts = soup.find_all('li', {'class': ['first', '']})
+        
+        parsed_posts = []
+        
+        for post in posts:
+            # Extract post id
+            post_id = post.get('id', '').replace('edge-assoc-', '')
+            
+            # Extract date and time
+            datetime = post.find('span', {'class': 'small gray'})
+            datetime = datetime.text if datetime else ''
+            
+            # Extract author's name and profile picture
+            author = post.find('a', {'title': 'View user profile.'})
+            author_name = author.text if author else ''
+            
+            profile_pic = post.find('img', {'class': 'imagecache imagecache-profile_sm'})
+            profile_pic_url = profile_pic.get('src', '') if profile_pic else ''
+            
+            # Extract main content
+            content_span = post.find('span', {'class': 'update-body s-rte'})
+            content = content_span.get_text() if content_span else ''
+  
+            # Check if there is a "Show More" link
+            show_more_link = post.find('a', {'class': 'show-more-link'})
+            show_more_href = show_more_link.get('href', '') if show_more_link else ''
+
+            images = [img.get('src', '') for img in content_span.find_all('img')]
+
+            if show_more_href:
+                with self.session.post(f"{self._base_url}{show_more_href}",
+                                      stream=True,
+                                      allow_redirects=True) as r:
+                    if r.status_code == 200:
+                        data = r.json()['update']
+                        # Parse the additional content using BeautifulSoup
+                        additional_content_soup = BeautifulSoup(data, 'html.parser')
+                        content = additional_content_soup.get_text()
+                        images = [img.get('src', '') for img in additional_content_soup.find_all('img')]
+
+            
+            parsed_posts.append({
+                'post_id': post_id,
+                'datetime': datetime,
+                'author': author_name,
+                'profile_pic_url': profile_pic_url,
+                'content': content.strip(),
+                'show_more_href': show_more_href,
+                'images': images
+            })
+        
+        return parsed_posts
 
     def onedrive_login(self, email: str, password: str) -> None:
         onedrive_cookie_file = 'onedrive_cookies.pkl'
@@ -368,27 +450,38 @@ class SchoologyAlbumsDownloader:
         course_id = current_url[36:46]
         self.config['course_id'] = course_id
 
-        self.get_updates()
-
         self._save_cookies(schoology_cookie_file)
 
         self.driver.close()
 
 
 def main():
-    parser = ArgumentParser("Schoology Albums Downloader CLI")
-    parser.add_argument("-e", "--email")
-    parser.add_argument("-s", "--subdomain")
-    args = parser.parse_args()
-    password = getpass.getpass()
+
+    EMAIL = os.environ.get("SCHOOLOGY_EMAIL")
+    PASSWORD = os.environ.get("SCHOOLOGY_PASSWORD")
+    SUBDOMAIN = os.environ.get("SCHOOLOGY_SUBDOMAIN")
 
     downloader = SchoologyAlbumsDownloader(headless=True,
-                                           subdomain=args.subdomain)
+                                           subdomain=SUBDOMAIN)
     # downloader.onedrive_login(args.email, args.password)
-    downloader.schoology_login(args.email, password)
-    albums = downloader.get_albums()
-    for album in reversed(albums):
-        downloader.download_album(album)
+    downloader.schoology_login(EMAIL, PASSWORD)
+    posts = downloader.get_updates()
+    for post in reversed(posts):
+        if not post['post_id'] in downloader.config['updates']:
+            line_bot_api.push_message(
+                line_group_id,
+                TextSendMessage(text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
+            )
+            for image in post['images']:
+                line_bot_api.push_message(
+                    line_group_id,
+                    ImageSendMessage(
+                        original_content_url=image,
+                        preview_image_url=image
+                    )
+                )
+            downloader.config['updates'][post['post_id']] = post
+    downloader._save_config()
 
 
 if __name__ == "__main__":
