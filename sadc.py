@@ -32,8 +32,30 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s",
 
 from dotenv import load_dotenv, find_dotenv
 
+import openai
+from langchain.chat_models import ChatOpenAI
+# To control the randomness and creativity of the generated
+# text by an LLM, use temperature = 0.0
+chat = ChatOpenAI(temperature=0.0, model=llm_model)
+chat
+
+template_string = """Translate the text \
+that is delimited by triple backticks \
+into a style that is {style}. \
+text: ```{text}```
+"""
+from langchain.prompts import ChatPromptTemplate
+
+prompt_template = ChatPromptTemplate.from_template(template_string)
+
+
+
+
 
 load_dotenv(find_dotenv(usecwd=True))
+
+openai.api_key = os.environ['OPENAI_API_KEY']
+
 channel_secret = os.getenv('LINE_CHANNEL_SECRET', None)
 line_group_id = os.getenv('LINE_GROUP_ID', None)
 channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', None)
