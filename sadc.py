@@ -485,10 +485,12 @@ def main():
     for post in reversed(posts):
         if not post['post_id'] in downloader.config['updates']:
             update_content = f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}"
+            summary = summarize(update_content)
+            if len(update_content) > 5000:
+                update_content = update_content[0:5000]
             line_bot_api.push_message(
                 line_group_id,
-                TextSendMessage(
-                    text=f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}")
+                TextSendMessage(text=update_content)
             )
             for image in post['images']:
                 line_bot_api.push_message(
@@ -498,7 +500,6 @@ def main():
                         preview_image_url=image
                     )
                 )
-            summary = summarize(update_content)
             # logging.info(summary)
             line_bot_api.push_message(
                 line_group_id,
