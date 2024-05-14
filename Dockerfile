@@ -1,4 +1,4 @@
-FROM python:3.10-alpine
+FROM python:3.11-alpine
 
 COPY requirements.txt /app/requirements.txt
 
@@ -8,7 +8,7 @@ RUN apk update && \
     pip install -r /app/requirements.txt --no-cache-dir && \
     rm -f /app/requirements.txt
 
-COPY sadc.py /app/sadc.py
+COPY app /app
 
 VOLUME /downloads
 WORKDIR /downloads

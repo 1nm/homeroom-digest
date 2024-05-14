@@ -12,17 +12,15 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 from dotenv import find_dotenv, load_dotenv
-from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
 from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import (ImageSendMessage, MessageEvent, TextMessage,
-                            TextSendMessage)
+from linebot.models import ImageSendMessage, TextSendMessage
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+
+from summarizer import summarize
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s",
                     level=logging.INFO)
@@ -456,21 +454,6 @@ class SchoologyAlbumsDownloader:
         self.driver.close()
 
 
-def summarize(text):
-    # To control the randomness and creativity of the generated
-    # text by an LLM, use temperature = 0.0
-
-    template_string = os.environ.get("PROMPT_TEMPLATE")
-    prompt_template = ChatPromptTemplate.from_template(template_string)
-    messages = prompt_template.format_messages(text=text)
-
-    chat = AzureChatOpenAI(
-        deployment_name=os.environ.get("OPENAI_DEPLOYMENT_NAME")
-    )
-
-    response = chat(messages)
-    return response.content
-
 
 def main():
     EMAIL = os.environ.get("SCHOOLOGY_EMAIL")
@@ -486,12 +469,14 @@ def main():
         if not post['post_id'] in downloader.config['updates']:
             update_content = f"On {post['datetime']}, {post['author']} posted:\n\n{post['content']}"
             summary = summarize(update_content)
-            if len(update_content) > 5000:
-                update_content = update_content[0:5000]
-            line_bot_api.push_message(
-                line_group_id,
-                TextSendMessage(text=update_content)
-            )
+            # Split the update_content into 4900 characters chunks
+            chunks = [update_content[i:i + 4900]
+                      for i in range(0, len(update_content), 4900)]
+            for chunk in chunks:
+                line_bot_api.push_message(
+                    line_group_id,
+                    TextSendMessage(text=chunk)
+                )
             for image in post['images']:
                 line_bot_api.push_message(
                     line_group_id,

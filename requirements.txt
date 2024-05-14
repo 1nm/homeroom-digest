@@ -1,7 +1,6 @@
-requests~=2.25.1
-selenium~=3.141.0
+requests
+selenium
 beautifulsoup4
 python-dotenv
 line-bot-sdk
-langchain==0.0.276
-openai==0.27.10
+langchain~=0.1.0
